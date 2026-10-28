@@ -612,8 +612,16 @@ let aiHist=[], aiBusy=false, lastWrong="";
 function aiReset(){aiHist=[];aiBusy=false;$("aiLog").innerHTML="";$("aiInput").value="";$("aiBox").hidden=true;$("aiOpen").hidden=true;}
 function aiAdd(cls,text){const d=document.createElement("div");d.className="ai-msg "+cls;d.textContent=text;$("aiLog").appendChild(d);$("aiLog").scrollTop=$("aiLog").scrollHeight;return d;}
 function aiContext(w){
-  return `단어 '${w.w}'의 표준 발음은 [${finalOf(w)}]${w.alt?` (허용: ${w.alt.map(a=>"["+a+"]").join(", ")})`:""}이다. `+
-    `변동 과정: ${w.w} → `+w.s.map(x=>`(${x[0]}${x[2]?": "+x[2]:""}) [${plain(x[1])}]`).join(" → ")+".";
+  // 교사가 검증한 데이터만 AI에게 넘김: 정답, 단계별 변화, 규칙 정의(교과서 문장)
+  const lines=[`단어: ${w.w}`,`표준 발음: [${finalOf(w)}]`+(w.alt?` (허용 발음: ${w.alt.map(a=>"["+a+"]").join(", ")})`:"")];
+  let prev=w.w;
+  w.s.forEach((x,i)=>{const now="["+plain(x[1])+"]";
+    lines.push(`${i+1}단계: ${prev} → ${now} / 규칙: ${x[0]}(${RULES[x[0]].t})`+(x[2]?` / 보충: ${x[2]}`:""));
+    prev=now;});
+  lines.push("규칙 정의:");
+  rulesOf(w).forEach(r=>lines.push(`- ${r}: ${RULES[r].d}`));
+  if(w.n) lines.push(`참고: ${w.n}`);
+  return lines.join("\n");
 }
 async function aiAsk(text){
   if(aiBusy||!text.trim())return;
@@ -623,7 +631,7 @@ async function aiAsk(text){
   try{
     const r=await fetch(HINT_URL,{method:"POST",body:JSON.stringify({history:aiHist,context:aiContext(cur)})});
     const j=await r.json();
-    if(j.answer){wait.textContent=j.answer;aiHist.push({role:"assistant",content:j.answer});}
+    if(j.answer){const a=j.answer.replace(/\*\*/g,"");wait.textContent=a;aiHist.push({role:"assistant",content:a});}
     else{wait.className="ai-msg err";wait.textContent=j.error||"힌트를 받지 못했어요.";aiHist.pop();}
   }catch(e){wait.className="ai-msg err";wait.textContent="연결이 안 돼요. 잠시 후 다시 해 보세요.";aiHist.pop();}
   aiBusy=false;$("aiSend").disabled=false;$("aiInput").focus();
